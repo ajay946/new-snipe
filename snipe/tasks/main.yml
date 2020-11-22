@@ -1,0 +1,168 @@
+---
+# tasks file for snipe
+    - name: Update repositories cache
+      apt: update_cache=yes
+   
+    - name: Install tasksel
+      apt: name=tasksel state=latest
+
+    - name: Install lamp using tasksel
+      shell: tasksel install lamp-server
+
+    - name: Create phpinfo.php file
+      copy:
+        dest: "/var/www/html/phpinfo.php"
+        content: |
+          <?php phpinfo(); ?>
+
+    - name: Clone snipe-it repo
+      git:
+        repo: https://github.com/snipe/snipe-it 
+        dest: /var/www/snipeit
+
+    - name: Copy .env.example to .env
+      shell: cp /var/www/snipeit/.env.example /var/www/snipeit/.env   
+
+    - name: Add .my.cnf
+      template: src=/templates/my.cnf.j2 dest=/root/.my.cnf owner=root group=root mode=0600
+
+   # Set root password
+   # UPDATE mysql.user SET Password=PASSWORD('mysecret') WHERE User='root';
+   # FLUSH PRIVILEGES;
+
+    - name: Set root Password
+      mysql_user: login_password={{ mysql_root_password }} check_implicit_admin=yes name=root host={{ item }} password={{ mysql_root_password }} state=present 
+      with_items:
+        - localhost
+        - 127.0.0.1
+        - ::1
+
+    - name: Reload privilege tables
+      command: 'mysql -ne "{{ item }}"'
+      with_items:
+        - FLUSH PRIVILEGES
+      changed_when: False
+
+    - name: Remove anonymous user
+      mysql_user: name='' host=localhost state=absent
+
+    - name: Disallow root login remotely
+      command: 'mysql -ne "{{ item }}"'
+      with_items:
+        - DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1')
+      changed_when: False
+
+    - name: Remove test database and access to it
+      command: 'mysql -ne "{{ item }}"'
+      with_items:
+        - DROP DATABASE IF EXISTS test
+        - DELETE FROM mysql.db WHERE Db='test' OR Db='test\\_%'
+      changed_when: False
+
+    - name: Reload privilege tables
+      command: 'mysql -ne "{{ item }}"'
+      with_items:
+        - FLUSH PRIVILEGES
+      changed_when: False   
+
+    - name: create a new database
+      mysql_db: name=snipeit state=present login_user=root login_password=root
+  
+    - name: Create snipeit mysql user
+      mysql_user: name=snipeit host='localhost' password=root priv=*.*:ALL state=present
+    
+    - name: Reload privilege tables
+      command: 'mysql -ne "{{ item }}"'
+      with_items:
+        - FLUSH PRIVILEGES
+      changed_when: False   
+
+    - name: Restart mysql db 
+      service: name=mysql  enabled=yes state=restarted
+
+    - name: replace app url
+      replace:
+        path: /var/www/snipeit/.env
+        regexp: 'APP_URL=null'
+        replace: "APP_URL=127.0.0.1"
+    - name: replace db name
+      replace:
+        path: /var/www/snipeit/.env
+        regexp: 'DB_DATABASE=null'
+        replace: "DB_DATABASE=snipeit"
+    - name: replace db username
+      replace:
+        path: /var/www/snipeit/.env
+        regexp: 'DB_USERNAME=null'
+        replace: "DB_USERNAME=root"
+    - name: replace db password
+      replace:
+        path: /var/www/snipeit/.env
+        regexp: 'DB_PASSWORD=null'
+        replace: "DB_PASSWORD=root"
+
+    - name: Fix app/storage and public/uploads folders permissions
+      file: path="/var/www/snipeit/app/storage" recurse=yes group=www-data mode=0775
+
+    - name: Fix app/storage and public/uploads folders permissions
+      file: path="/var/www/snipeit/public/uploads" recurse=yes group=www-data mode=0755
+
+    - name: To download composer 
+      shell: curl -sS https://getcomposer.org/installer | php
+
+    - name: Move composer.phar
+      command: mv composer.phar /usr/local/bin/composer  
+
+    - name: add repository universe
+      apt_repository:
+        repo: 'universe'
+    
+    
+    - name: install required dependencies
+      apt: pkg={{ item }} state=latest
+      with_items:
+         - git 
+         - unzip 
+         - php
+         - php-curl 
+         - php-mysql 
+         - php-gd 
+         - php-ldap 
+         - php-zip 
+         - php-mbstring 
+         - php-xml 
+         - php-bcmath 
+         - php-tokenizer
+
+    - name: Install composer
+      shell: composer install --prefer-source --no-interaction chdir="/var/www/snipeit/"
+
+    - name: Generate production app key
+      shell: php artisan key:generate --force chdir="/var/www/snipeit/"
+
+    - name: Create snipe virtual host in apache
+      template: src=apache_snipeit.conf.j2 dest=/etc/apache2/sites-available/snipeit.example.com.conf
+
+    - name: Enable snipeit virtual host
+      file: src=/etc/apache2/sites-available/snipeit.example.com.conf dest=/etc/apache2/sites-enabled/snipeit.example.com.conf owner=root group=root state=link
+
+    - name: Enable mode rewrite in Apache
+      apache2_module: name=rewrite state=present  
+     
+    - name: Restart apache2 server
+      service: name=apache2 state=restarted 
+
+    - name: Disable default Apache Site
+      file: path=/etc/apache2/sites-enabled/000-default.conf state=absent
+    
+    - name: Reload apache2 service
+      service: name=apache2 state=reloaded
+  
+    - name: Enable php extensions
+      shell: phpenmod mbstring
+
+    - name: Enable mode rewrite in Apache
+      apache2_module: name=rewrite state=present  
+     
+    - name: Restart apache2 server
+      service: name=apache2 state=restarted 

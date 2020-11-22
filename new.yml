@@ -1,0 +1,10 @@
+---
+- name: Install snipe it
+  hosts: all
+  become: true
+  vars:
+    mysql_root_password: root
+  roles:
+   - snipe
+
+    
