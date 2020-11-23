@@ -140,7 +140,7 @@
       command: mv composer.phar /usr/local/bin/composer  
     
     - name: Install composer
-      shell: composer install --prefer-source --no-interaction chdir="/var/www/snipeit/"
+      shell: composer install --no-dev --prefer-source --no-interaction chdir="/var/www/snipeit/"
 
     - name: Generate production app key
       shell: php artisan key:generate --force chdir="/var/www/snipeit/"
