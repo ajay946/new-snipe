@@ -1,8 +1,5 @@
 ---
 # tasks file for snipe
-    - name: Update repositories cache
-      apt: update_cache=yes
-   
     - name: Install tasksel
       apt: name=tasksel state=latest
 
@@ -24,12 +21,41 @@
       shell: cp /var/www/snipeit/.env.example /var/www/snipeit/.env   
 
     - name: Add .my.cnf
-      template: src=/templates/my.cnf.j2 dest=/root/.my.cnf owner=root group=root mode=0600
+      template: src=templates/my.cnf.j2 dest=/root/.my.cnf owner=root group=root mode=0600
 
    # Set root password
    # UPDATE mysql.user SET Password=PASSWORD('mysecret') WHERE User='root';
    # FLUSH PRIVILEGES;
+    
+      #- name: add repository universe
+      #apt_repository:
+      #  repo: 'universe'
+    - name: Add PHP 7.2 PPA repository
+      apt_repository:
+        repo: 'ppa:ondrej/php'
 
+    - name: to add universe repository
+      shell: sudo add-apt-repository universe
+
+
+    - name: install required dependencies
+      apt: pkg={{ item }} state=latest
+      with_items:
+         - git
+         - unzip
+         - php7.2
+         - php7.2-curl
+         - php7.2-mysql
+         - php7.2-gd
+         - php7.2-ldap
+         - php7.2-mbstring
+         - php7.2-xml
+         - php7.2-bcmath
+         - php7.2-tokenizer
+         - php7.2-zip  
+         - python-mysqldb
+
+           
     - name: Set root Password
       mysql_user: login_password={{ mysql_root_password }} check_implicit_admin=yes name=root host={{ item }} password={{ mysql_root_password }} state=present 
       with_items:
@@ -112,28 +138,7 @@
 
     - name: Move composer.phar
       command: mv composer.phar /usr/local/bin/composer  
-
-    - name: add repository universe
-      apt_repository:
-        repo: 'universe'
     
-    
-    - name: install required dependencies
-      apt: pkg={{ item }} state=latest
-      with_items:
-         - git 
-         - unzip 
-         - php
-         - php-curl 
-         - php-mysql 
-         - php-gd 
-         - php-ldap 
-         - php-zip 
-         - php-mbstring 
-         - php-xml 
-         - php-bcmath 
-         - php-tokenizer
-
     - name: Install composer
       shell: composer install --prefer-source --no-interaction chdir="/var/www/snipeit/"
 
